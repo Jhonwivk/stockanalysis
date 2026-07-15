@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Generate full A-share daily review via DeepSeek (OpenAI-compatible API).
 
-Aims to match local Agent report structure (references/report-template.md +
-core-xinfa.md). Not bit-identical to Cursor (no browsing/tools), but same
-sections, mainline three-line rules, and tomorrow multi-scenario plans.
+Uses in-repo references/report-template.md + core-xinfa.md only.
+No Cursor/Claude Skill required. Output structure follows those files.
 
 Env:
-  DEEPSEEK_API_KEY   required
+  DEEPSEEK_API_KEY   required for LLM path
   DEEPSEEK_BASE_URL  default https://api.deepseek.com
   DEEPSEEK_MODEL     default deepseek-chat
 """
