@@ -200,7 +200,11 @@ def main() -> int:
 
     data = run_fetch(args.date, args.days)
     md = build_md(data, args.date)
-    out = Path(args.output) if args.output else ROOT / f"A股盘面复盘_{args.date[:4]}-{args.date[4:6]}-{args.date[6:]}_定量.md"
+    stamp = f"{args.date[:4]}-{args.date[4:6]}-{args.date[6:]}"
+    out_dir = ROOT / "output"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = Path(args.output) if args.output else out_dir / f"A股盘面复盘_{stamp}_定量.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md, encoding="utf-8")
     print(str(out))
     return 0

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate full A-share daily review via DeepSeek (OpenAI-compatible API).
 
-Uses in-repo references/report-template.md + core-xinfa.md only.
-No Cursor/Claude Skill required. Output structure follows those files.
+Uses prompts/report-template.md + prompts/writing-rules.md.
+No Cursor/Claude Skill required.
 
 Env:
   DEEPSEEK_API_KEY   required for LLM path
@@ -24,8 +24,8 @@ from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 FETCH = ROOT / "scripts" / "fetch_market_data.py"
-TEMPLATE = ROOT / "references" / "report-template.md"
-XINFA = ROOT / "references" / "core-xinfa.md"
+TEMPLATE = ROOT / "prompts" / "report-template.md"
+RULES = ROOT / "prompts" / "writing-rules.md"
 TZ = ZoneInfo("Asia/Shanghai")
 
 
@@ -177,8 +177,11 @@ def main() -> int:
     print(f"fetch market data {args.date} ...", flush=True)
     data = run_fetch(args.date, args.days)
     pack = build_context_pack(data)
+    if not TEMPLATE.exists() or not RULES.exists():
+        raise SystemExit(f"missing prompts: {TEMPLATE.name} / {RULES.name}")
+
     template = TEMPLATE.read_text(encoding="utf-8")
-    xinfa = XINFA.read_text(encoding="utf-8")
+    rules = RULES.read_text(encoding="utf-8")
 
     trade_fmt = f"{args.date[:4]}-{args.date[4:6]}-{args.date[6:]}"
     user_prompt = f"""请根据下列量化数据包，撰写「{trade_fmt}」的完整 A 股盘面复盘。
@@ -186,16 +189,15 @@ def main() -> int:
 # 报告模板（必须遵循结构）
 {template}
 
-# 短线执行心法（§一/二/三仓位与手法必须映射）
-{xinfa}
+# 写作规则（§一/二/三仓位与手法必须映射）
+{rules}
 
 # 量化数据包（唯一事实来源）
 ```json
 {json.dumps(pack, ensure_ascii=False)}
 ```
 
-生成文件名语义：A股盘面复盘_{trade_fmt}.md
-文首注明：DeepSeek 自动复盘（模板对齐本地 Agent）；数据截至收盘。
+文首注明：自动复盘；数据截至收盘。仅输出报告正文。
 """
 
     print(f"calling {model} @ {base_url} ...", flush=True)
@@ -209,7 +211,10 @@ def main() -> int:
         model=model,
     )
     md = strip_fence(content)
-    out = Path(args.output) if args.output else ROOT / f"A股盘面复盘_{trade_fmt}.md"
+    out_dir = ROOT / "output"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = Path(args.output) if args.output else out_dir / f"A股盘面复盘_{trade_fmt}.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(md + "\n", encoding="utf-8")
     print(str(out))
     return 0
