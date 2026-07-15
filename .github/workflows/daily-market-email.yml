@@ -1,0 +1,77 @@
+name: Daily market review email
+
+# 每个交易日下午（默认北京时间 20:30 ≈ UTC 12:30）跑定量复盘并发邮
+# 可在 GitHub → Actions → 本工作流 → Run workflow 手动触发
+
+on:
+  schedule:
+    # 周一到周五 12:30 UTC = 20:30 Asia/Shanghai（夏令时/固定偏移：中国无夏令时）
+    - cron: "30 12 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      trade_date:
+        description: "交易日 YYYYMMDD（可空=当天上海日期）"
+        required: false
+        default: ""
+
+jobs:
+  review-and-email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve trade date (Asia/Shanghai)
+        id: d
+        env:
+          INPUT_DATE: ${{ github.event.inputs.trade_date }}
+        run: |
+          if [ -n "$INPUT_DATE" ]; then
+            echo "date=$INPUT_DATE" >> "$GITHUB_OUTPUT"
+          else
+            echo "date=$(TZ=Asia/Shanghai date +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate quantitative review
+        run: |
+          python3 scripts/generate_daily_quant_review.py --date "${{ steps.d.outputs.date }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-review-${{ steps.d.outputs.date }}
+          path: A股盘面复盘_*_定量.md
+          if-no-files-found: error
+
+      - name: Send email
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_SSL: ${{ secrets.SMTP_SSL }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME }}
+        run: |
+          set -e
+          DATE="${{ steps.d.outputs.date }}"
+          OUT="A股盘面复盘_${DATE:0:4}-${DATE:4:2}-${DATE:6:2}_定量.md"
+          test -f "$OUT"
+          # secrets 未配置时跳过发信但保留产物
+          if [ -z "${SMTP_USER:-}" ] || [ -z "${SMTP_PASS:-}" ] || [ -z "${EMAIL_TO:-}" ]; then
+            echo "SMTP secrets missing; skip email (artifact still uploaded)."
+            exit 0
+          fi
+          export SMTP_HOST="${SMTP_HOST:-smtp.qq.com}"
+          export SMTP_PORT="${SMTP_PORT:-465}"
+          export SMTP_SSL="${SMTP_SSL:-true}"
+          python3 scripts/send_report_email.py "$OUT" \
+            --subject "A股盘面复盘 ${DATE:0:4}-${DATE:4:2}-${DATE:6:2}（定量自动）" \
+            --body "由 GitHub Actions 定时生成的定量复盘。正式 Agent 叙事稿需人工/Agent 另传。仅供研究，不构成投资建议。"

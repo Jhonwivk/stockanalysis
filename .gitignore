@@ -1,0 +1,52 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Nested / bulky local trees
+third_party/
+aicardmap/
+.claude/
+.ai/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# ---- Personal / generated analysis (local only) ----
+# Daily reviews
+A股盘面复盘_*
+A股盘面逻辑验证_*
+*_定量.md
+reports/
+output/
+out/
+
+# Stock fundamental / research reports
+*_基本面分析报告.*
+*_研究报告.*
+*_存储行业研究报告.*
+
+# Local model inputs / dumps
+*_dcf_*.json
+*_dcf_input.json
+*_dcf_base.json
+*_dcf_bear.json
+market_week_*.json
+*.log
+
+# Generated binaries
+*.pdf
+*.html
+
+# Optional personal research modules (keep on disk, not in public repo)
+ai-chain-research/
