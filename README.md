@@ -17,9 +17,9 @@
 | 路径 | 说明 |
 |---|---|
 | `scripts/fetch_market_data.py` | 行情 |
-| `scripts/generate_llm_review.py` | **DeepSeek 完整复盘** |
-| `scripts/generate_daily_quant_review.py` | 无 Key 时的定量回退 |
-| `scripts/send_report_email.py` / `run_daily_email.sh` | 发邮 |
+| `scripts/generate_llm_review.py` | **DeepSeek 完整复盘（Markdown 中间稿）** |
+| `scripts/md_to_pdf.py` | Markdown → PDF |
+| `scripts/send_report_email.py` / `run_daily_email.sh` | **只发 PDF**，不发送 Markdown |
 | `references/report-template.md` · `core-xinfa.md` | 与本地技能对齐的模板 |
 | `.github/workflows/daily-market-email.yml` | 工作日 20:30（北京） |
 
@@ -43,10 +43,9 @@ chmod +x scripts/*.sh scripts/*.py
 
 Settings → Secrets and variables → **Actions**（不是 Agents / 不是 Runners）。
 
-## 安全
+## 交付物
 
-- `.env` 与报告 md/pdf 已 gitignore  
-- **永远不要**把 API Key / 邮箱授权码提交进仓库或发在聊天里  
+GitHub Actions / 本地一键脚本最终 **只邮件发送 PDF**；Markdown 仅本地中间文件，不作为邮件附件，也不作为 Actions 交付产物上传。
 
 ## 免责
 
