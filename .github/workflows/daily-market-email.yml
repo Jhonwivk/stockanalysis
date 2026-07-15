@@ -1,11 +1,10 @@
 name: Daily market review email
 
-# 每个交易日下午（默认北京时间 20:30 ≈ UTC 12:30）跑定量复盘并发邮
-# 可在 GitHub → Actions → 本工作流 → Run workflow 手动触发
+# 工作日北京 20:30：DeepSeek 完整复盘（同本地模板）→ 发邮
+# 需 Secrets: DEEPSEEK_API_KEY + SMTP_* / EMAIL_*
 
 on:
   schedule:
-    # 周一到周五 12:30 UTC = 20:30 Asia/Shanghai（夏令时/固定偏移：中国无夏令时）
     - cron: "30 12 * * 1-5"
   workflow_dispatch:
     inputs:
@@ -17,7 +16,7 @@ on:
 jobs:
   review-and-email:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,15 +37,35 @@ jobs:
             echo "date=$(TZ=Asia/Shanghai date +%Y%m%d)" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Generate quantitative review
+      - name: Generate DeepSeek full review
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_BASE_URL: ${{ secrets.DEEPSEEK_BASE_URL }}
+          DEEPSEEK_MODEL: ${{ secrets.DEEPSEEK_MODEL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
         run: |
-          python3 scripts/generate_daily_quant_review.py --date "${{ steps.d.outputs.date }}"
+          set -e
+          DATE="${{ steps.d.outputs.date }}"
+          STAMP="${DATE:0:4}-${DATE:4:2}-${DATE:6:2}"
+          export DEEPSEEK_BASE_URL="${DEEPSEEK_BASE_URL:-https://api.deepseek.com}"
+          export DEEPSEEK_MODEL="${DEEPSEEK_MODEL:-deepseek-chat}"
+          if [ -z "${DEEPSEEK_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
+            echo "No DEEPSEEK_API_KEY; writing quantitative fallback."
+            python3 scripts/generate_daily_quant_review.py --date "$DATE"
+            echo "primary=A股盘面复盘_${STAMP}_定量.md" >> "$GITHUB_ENV"
+          else
+            python3 scripts/generate_llm_review.py --date "$DATE"
+            echo "primary=A股盘面复盘_${STAMP}.md" >> "$GITHUB_ENV"
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: market-review-${{ steps.d.outputs.date }}
-          path: A股盘面复盘_*_定量.md
+          path: |
+            A股盘面复盘_*.md
           if-no-files-found: error
 
       - name: Send email
@@ -61,17 +80,15 @@ jobs:
           EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME }}
         run: |
           set -e
-          DATE="${{ steps.d.outputs.date }}"
-          OUT="A股盘面复盘_${DATE:0:4}-${DATE:4:2}-${DATE:6:2}_定量.md"
-          test -f "$OUT"
-          # secrets 未配置时跳过发信但保留产物
+          test -n "${primary:-}"
+          test -f "$primary"
           if [ -z "${SMTP_USER:-}" ] || [ -z "${SMTP_PASS:-}" ] || [ -z "${EMAIL_TO:-}" ]; then
-            echo "SMTP secrets missing; skip email (artifact still uploaded)."
+            echo "SMTP secrets missing; skip email."
             exit 0
           fi
-          export SMTP_HOST="${SMTP_HOST:-smtp.qq.com}"
+          export SMTP_HOST="${SMTP_HOST:-smtp.163.com}"
           export SMTP_PORT="${SMTP_PORT:-465}"
           export SMTP_SSL="${SMTP_SSL:-true}"
-          python3 scripts/send_report_email.py "$OUT" \
-            --subject "A股盘面复盘 ${DATE:0:4}-${DATE:4:2}-${DATE:6:2}（定量自动）" \
-            --body "由 GitHub Actions 定时生成的定量复盘。正式 Agent 叙事稿需人工/Agent 另传。仅供研究，不构成投资建议。"
+          python3 scripts/send_report_email.py "$primary" \
+            --subject "A股盘面复盘 $(basename "$primary" .md | sed 's/A股盘面复盘_//')" \
+            --body "DeepSeek 自动复盘（模板对齐本地 Agent）。仅供研究，不构成投资建议。"
