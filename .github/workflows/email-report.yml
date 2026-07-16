@@ -1,0 +1,50 @@
+name: Email report file
+
+on:
+  workflow_dispatch:
+    inputs:
+      report_path:
+        description: "Repo-relative path to md/pdf to email"
+        required: true
+        default: "delivery/A股午盘分析_2026-07-16.md"
+      subject:
+        description: "Email subject"
+        required: false
+        default: "A股午盘分析 2026-07-16"
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Send email
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_SSL: ${{ secrets.SMTP_SSL }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME }}
+          REPORT_PATH: ${{ github.event.inputs.report_path }}
+          SUBJECT: ${{ github.event.inputs.subject }}
+        run: |
+          set -e
+          test -f "$REPORT_PATH"
+          if [ -z "${SMTP_USER:-}" ] || [ -z "${SMTP_PASS:-}" ] || [ -z "${EMAIL_TO:-}" ]; then
+            echo "SMTP not configured; cannot send."
+            exit 1
+          fi
+          export SMTP_HOST="${SMTP_HOST:-smtp.163.com}"
+          export SMTP_PORT="${SMTP_PORT:-465}"
+          export SMTP_SSL="${SMTP_SSL:-true}"
+          python3 scripts/send_email.py "$REPORT_PATH" \
+            --subject "${SUBJECT:-A股午盘分析}" \
+            --body "附件为完整午盘分析报告。仅供研究，不构成投资建议。"
