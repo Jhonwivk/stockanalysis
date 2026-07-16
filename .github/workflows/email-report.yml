@@ -1,16 +1,21 @@
 name: Email report file
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "delivery/**"
+      - ".github/workflows/email-report.yml"
   workflow_dispatch:
     inputs:
       report_path:
         description: "Repo-relative path to md/pdf to email"
         required: true
-        default: "delivery/A股午盘分析_2026-07-16.md"
+        default: "delivery/A股午盘分析_2026-07-16.pdf"
       subject:
         description: "Email subject"
         required: false
-        default: "A股午盘分析 2026-07-16"
+        default: "A股午盘分析 2026-07-16（完整报告）"
 
 jobs:
   email:
@@ -23,6 +28,27 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Resolve attachment
+        id: file
+        env:
+          INPUT_PATH: ${{ github.event.inputs.report_path }}
+        run: |
+          set -e
+          if [ -n "${INPUT_PATH:-}" ]; then
+            PATH_FILE="$INPUT_PATH"
+          else
+            PATH_FILE="delivery/A股午盘分析_2026-07-16.pdf"
+          fi
+          test -f "$PATH_FILE"
+          echo "path=$PATH_FILE" >> "$GITHUB_OUTPUT"
+          # optional companion markdown
+          MD="${PATH_FILE%.pdf}.md"
+          if [ -f "$MD" ] && [ "$PATH_FILE" != "$MD" ]; then
+            echo "md=$MD" >> "$GITHUB_OUTPUT"
+          else
+            echo "md=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Send email
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -33,11 +59,9 @@ jobs:
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME }}
-          REPORT_PATH: ${{ github.event.inputs.report_path }}
           SUBJECT: ${{ github.event.inputs.subject }}
         run: |
           set -e
-          test -f "$REPORT_PATH"
           if [ -z "${SMTP_USER:-}" ] || [ -z "${SMTP_PASS:-}" ] || [ -z "${EMAIL_TO:-}" ]; then
             echo "SMTP not configured; cannot send."
             exit 1
@@ -45,6 +69,11 @@ jobs:
           export SMTP_HOST="${SMTP_HOST:-smtp.163.com}"
           export SMTP_PORT="${SMTP_PORT:-465}"
           export SMTP_SSL="${SMTP_SSL:-true}"
-          python3 scripts/send_email.py "$REPORT_PATH" \
-            --subject "${SUBJECT:-A股午盘分析}" \
-            --body "附件为完整午盘分析报告。仅供研究，不构成投资建议。"
+          FILES="${{ steps.file.outputs.path }}"
+          if [ -n "${{ steps.file.outputs.md }}" ]; then
+            FILES="$FILES ${{ steps.file.outputs.md }}"
+          fi
+          # shellcheck disable=SC2086
+          python3 scripts/send_email.py $FILES \
+            --subject "${SUBJECT:-A股午盘分析 2026-07-16（完整报告）}" \
+            --body "附件为完整午盘分析报告（PDF + Markdown）。仅供研究，不构成投资建议。"
